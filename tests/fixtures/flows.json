@@ -1,0 +1,28 @@
+{
+  "flows": [
+    "Test_Flow_1",
+    "Test_Flow_2",
+    "Test_Flow_3"
+  ],
+  "environments": {
+    "sandbox": {
+      "flows_to_activate": [
+        "Sandbox_Test_Flow",
+        "Development_Flow"
+      ],
+      "flows_to_deactivate": [
+        "Production_Only_Flow"
+      ]
+    },
+    "production": {
+      "flows_to_activate": [
+        "Customer_Onboarding_Flow",
+        "Order_Processing_Flow"
+      ],
+      "flows_to_deactivate": [
+        "Legacy_Flow",
+        "Deprecated_Process"
+      ]
+    }
+  }
+}

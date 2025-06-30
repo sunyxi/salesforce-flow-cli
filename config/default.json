@@ -1,0 +1,31 @@
+{
+  "auth": {
+    "method": "jwt",
+    "clientId": "${SF_CLIENT_ID}",
+    "username": "${SF_USERNAME}",
+    "privateKeyPath": "${SF_PRIVATE_KEY_PATH}",
+    "sandbox": false
+  },
+  "batch": {
+    "maxConcurrent": 3,
+    "rateLimitDelay": 1000,
+    "maxRetries": 3,
+    "timeoutSeconds": 300
+  },
+  "logging": {
+    "level": "info",
+    "format": "structured",
+    "outputFile": "flow-operations.log"
+  },
+  "flows": {
+    "production": [
+      "Account_Validation_Flow",
+      "Opportunity_Approval_Flow",
+      "Lead_Assignment_Flow"
+    ],
+    "sandbox": [
+      "*_Test_Flow",
+      "Sandbox_*"
+    ]
+  }
+}

@@ -1,0 +1,16 @@
+# Test flows for unit testing
+Test_Flow_1
+Test_Flow_2
+Test_Flow_3
+
+# Screen flows
+Customer_Registration_Flow
+Product_Configuration_Flow
+
+# Record triggered flows
+Account_Update_Handler
+Opportunity_Stage_Automation
+
+# Scheduled flows
+Daily_Data_Cleanup
+Weekly_Report_Generation

@@ -1,0 +1,41 @@
+{
+  "flows": {
+    "screen_flows": [
+      "Customer_Onboarding_Flow",
+      "Product_Configuration_Flow",
+      "Service_Request_Flow"
+    ],
+    "record_triggered_flows": [
+      "Account_Update_Handler",
+      "Opportunity_Stage_Automation",
+      "Case_Assignment_Flow"
+    ],
+    "scheduled_flows": [
+      "Daily_Data_Cleanup",
+      "Weekly_Report_Generation",
+      "Monthly_Account_Review"
+    ]
+  },
+  "environments": {
+    "production": {
+      "flows_to_activate": [
+        "Customer_Onboarding_Flow",
+        "Account_Update_Handler",
+        "Daily_Data_Cleanup"
+      ],
+      "flows_to_deactivate": [
+        "Legacy_Process_Flow",
+        "Old_Validation_Flow"
+      ]
+    },
+    "sandbox": {
+      "flows_to_activate": [
+        "*_Test_Flow",
+        "Development_*"
+      ],
+      "flows_to_deactivate": [
+        "Production_*"
+      ]
+    }
+  }
+}
