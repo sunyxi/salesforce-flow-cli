@@ -33,11 +33,13 @@ async function generateUrlsCommand(flowNames, options, config) {
                 const currentActiveVersion = flowDef.ActiveVersion?.VersionNumber || 0;
                 const { latestVersion } = versionInfo;
                 
-                // Generate Flow setup URL
+                // Generate Flow setup URL (Flow Definition management)
                 const flowSetupUrl = `${instanceUrl}/lightning/setup/Flows/page?address=%2F${flowDef.Id}`;
                 
-                // Generate direct flow edit URL if there's a latest version
-                let flowEditUrl = null;
+                // Generate direct flow builder URL for editing
+                let flowBuilderUrl = null;
+                let flowActivateUrl = null;
+                
                 if (latestVersion > 0) {
                     // Get the Flow record ID for the latest version
                     const latestFlowQuery = `
@@ -48,7 +50,12 @@ async function generateUrlsCommand(flowNames, options, config) {
                     
                     if (latestFlowResult.records.length > 0) {
                         const flowId = latestFlowResult.records[0].Id;
-                        flowEditUrl = `${instanceUrl}/lightning/setup/Flows/page?address=%2F${flowId}`;
+                        
+                        // Direct Flow Builder URL for editing
+                        flowBuilderUrl = `${instanceUrl}/builder_platform_interaction/flowBuilder.app?flowId=${flowId}`;
+                        
+                        // Flow Details URL for activation (better for activation)
+                        flowActivateUrl = `${instanceUrl}/lightning/setup/Flows/page?address=%2F${flowId}`;
                     }
                 }
                 
@@ -60,20 +67,39 @@ async function generateUrlsCommand(flowNames, options, config) {
                     activeVersion: currentActiveVersion,
                     latestVersion: latestVersion,
                     flowSetupUrl: flowSetupUrl,
-                    flowEditUrl: flowEditUrl
+                    flowBuilderUrl: flowBuilderUrl,
+                    flowActivateUrl: flowActivateUrl
                 };
                 
                 results.push(result);
                 
                 // Display result
                 console.log(chalk.cyan(`📋 ${flowName}`));
-                console.log(`   Type: ${result.flowType}`);
-                console.log(`   Status: ${result.isActive ? chalk.green('Active') : chalk.yellow('Inactive')} (v${result.activeVersion}/${result.latestVersion})`);
-                console.log(`   API Activation: ${result.canActivateViaAPI ? chalk.green('✓ Supported') : chalk.red('✗ Not Supported (UI Required)')}`);
-                console.log(`   📱 Setup URL: ${chalk.blue(result.flowSetupUrl)}`);
-                if (result.flowEditUrl) {
-                    console.log(`   ✏️  Edit URL:  ${chalk.blue(result.flowEditUrl)}`);
+                
+                if (options.builderOnly) {
+                    // Show only Flow Builder URL for simplified output
+                    console.log(`   Status: ${result.isActive ? chalk.green('Active') : chalk.yellow('Inactive')} (v${result.activeVersion}/${result.latestVersion})`);
+                    if (result.flowBuilderUrl) {
+                        console.log(`   🔧 Flow Builder: ${chalk.blue(result.flowBuilderUrl)}`);
+                    } else {
+                        console.log(`   ⚠️  No latest version available for editing`);
+                    }
+                } else {
+                    // Show all URLs
+                    console.log(`   Type: ${result.flowType}`);
+                    console.log(`   Status: ${result.isActive ? chalk.green('Active') : chalk.yellow('Inactive')} (v${result.activeVersion}/${result.latestVersion})`);
+                    console.log(`   API Activation: ${result.canActivateViaAPI ? chalk.green('✓ Supported') : chalk.red('✗ Not Supported (UI Required)')}`);
+                    console.log(`   📱 Flow Setup: ${chalk.blue(result.flowSetupUrl)}`);
+                    
+                    if (result.flowBuilderUrl) {
+                        console.log(`   🔧 Flow Builder: ${chalk.blue(result.flowBuilderUrl)}`);
+                    }
+                    
+                    if (result.flowActivateUrl && !result.isActive) {
+                        console.log(`   ⚡ Activate: ${chalk.blue(result.flowActivateUrl)}`);
+                    }
                 }
+                
                 console.log('');
                 
             } catch (error) {
@@ -114,6 +140,14 @@ async function generateUrlsCommand(flowNames, options, config) {
         if (requiresUI > 0) {
             console.log(chalk.yellow(`\n⚠️  ${requiresUI} flows require manual activation through Salesforce UI`));
             console.log(chalk.white('   💡 Tip: Use the generated URLs above to quickly navigate to each flow'));
+        }
+        
+        // Show URL list for easy copying if requested
+        if (options.urlList) {
+            console.log(chalk.blue('\n📋 URL List (for easy copying):'));
+            results.filter(r => !r.error && r.flowBuilderUrl).forEach(r => {
+                console.log(r.flowBuilderUrl);
+            });
         }
         
         logger.info(`Generated URLs for ${successful} flows successfully`);

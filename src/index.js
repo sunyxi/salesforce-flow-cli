@@ -144,8 +144,19 @@ program
     .command('generate-urls <flows...>')
     .description('Generate Salesforce URLs for manual flow activation')
     .option('-o, --output <path>', 'Save report to JSON file')
+    .option('--url-list', 'Show plain URL list for easy copying')
     .action(async (flows, options) => {
         await generateUrlsCommand(flows, { ...program.opts(), ...options }, config);
+    });
+
+// Flow Builder URLs command (alias for convenience)
+program
+    .command('builder-urls <flows...>')
+    .description('Generate Flow Builder URLs for editing flows')
+    .option('-o, --output <path>', 'Save report to JSON file')
+    .option('--url-list', 'Show plain URL list for easy copying')
+    .action(async (flows, options) => {
+        await generateUrlsCommand(flows, { ...program.opts(), ...options, builderOnly: true }, config);
     });
 
 // Config command

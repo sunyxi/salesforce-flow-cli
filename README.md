@@ -1,551 +1,538 @@
-# Salesforce Flow CLI
+# Salesforce Flow CLI Tool
 
-A powerful command-line tool for bulk management of Salesforce Flows, supporting activation, deactivation, and status monitoring across multiple environments.
+[English](#english) | [中文](#中文) | [日本語](#日本語)
 
-## 🚀 Features
+---
 
-- **Bulk Operations**: Activate/deactivate multiple flows simultaneously
-- **Multiple Auth Methods**: JWT Bearer Token Flow and OAuth 2.0 support
-- **Environment Safety**: Built-in production environment protections
-- **Robust Error Handling**: Automatic retry logic with exponential backoff
-- **Flexible Input**: Support for JSON, TXT, and CSV flow lists
-- **Progress Tracking**: Real-time progress bars and detailed reporting
-- **Comprehensive Logging**: Structured logging with multiple output formats
-- **Dry Run Mode**: Preview changes without making modifications
+## English
 
-## 📋 Prerequisites
+### Overview
 
-- Node.js 14.0.0 or higher
-- Salesforce Connected App with appropriate permissions
-- Private key file for JWT authentication (recommended)
+A comprehensive command-line interface (CLI) tool for managing Salesforce Flows at scale. This tool provides efficient batch operations for activating, deactivating, and monitoring Flow statuses using the Salesforce Tooling API.
 
-## 🔧 Installation
+### Features
 
-### From Source
+- 🚀 **Flow Management**: Activate/deactivate flows individually or in batches
+- 📊 **Status Monitoring**: List all flows with version information and activation status  
+- 🔗 **URL Generation**: Generate direct Salesforce URLs for manual operations
+- 🔧 **Flow Builder URLs**: Direct links to Flow Builder for editing
+- 🎯 **Smart Detection**: Automatically identifies flow types and API compatibility
+- 🔐 **Multiple Auth**: Supports both OAuth and JWT authentication
+- ⚡ **Batch Operations**: Process multiple flows with progress tracking
+- 🛡️ **Error Handling**: Robust retry logic and detailed error reporting
+
+### Installation
 
 ```bash
-git clone <repository-url>
+# Clone the repository
+git clone https://github.com/yourusername/salesforce-flow-cli.git
 cd salesforce-flow-cli
+
+# Install dependencies
 npm install
-npm link  # Optional: for global access
+
+# Setup authentication (OAuth recommended)
+npm run setup-oauth
 ```
 
-### Direct Usage
+### Authentication Setup
 
+#### OAuth Authentication (Recommended)
 ```bash
-node src/index.js --help
+# Run the setup script
+npm run setup-oauth
+
+# Follow the prompts to configure:
+# - Salesforce org URL
+# - Client ID and Secret
+# - Redirect URI
 ```
 
-## ⚙️ Configuration
-
-### Environment Variables
-
-Set the following environment variables for authentication:
-
+#### JWT Authentication
 ```bash
-# JWT Authentication (Recommended)
-export SF_CLIENT_ID="your_connected_app_client_id"
-export SF_USERNAME="your_salesforce_username"
-export SF_PRIVATE_KEY_PATH="/path/to/your/private_key.pem"
-export SF_SANDBOX="true"  # or "false" for production
+# Create .env file
+cp .env.example .env
 
-# OAuth Authentication (Alternative)
-export SF_AUTH_METHOD="oauth"
-export SF_CLIENT_SECRET="your_client_secret"
-export SF_PASSWORD="your_password"
-export SF_SECURITY_TOKEN="your_security_token"
-
-# Optional Configuration
-export SF_MAX_CONCURRENT="3"
-export SF_RATE_LIMIT_DELAY="1000"
-export SF_MAX_RETRIES="3"
-export SF_LOG_LEVEL="info"
+# Configure JWT settings in .env
+SALESFORCE_LOGIN_URL=https://login.salesforce.com
+SALESFORCE_CLIENT_ID=your_client_id
+SALESFORCE_USERNAME=your_username
+SALESFORCE_PRIVATE_KEY_PATH=/path/to/private.key
 ```
 
-### Configuration File
+### Usage
 
-Create a `config/default.json` file in your project:
-
-```json
-{
-  "auth": {
-    "method": "jwt",
-    "clientId": "${SF_CLIENT_ID}",
-    "username": "${SF_USERNAME}",
-    "privateKeyPath": "${SF_PRIVATE_KEY_PATH}",
-    "sandbox": true
-  },
-  "batch": {
-    "maxConcurrent": 3,
-    "rateLimitDelay": 1000,
-    "maxRetries": 3,
-    "timeoutSeconds": 300
-  },
-  "logging": {
-    "level": "info",
-    "format": "structured",
-    "outputFile": "flow-operations.log"
-  }
-}
-```
-
-## 🎯 Usage
-
-### Basic Commands
-
-#### Activate Flows
-
-```bash
-# Activate single flow
-sf-flow activate MyFlow
-
-# Activate multiple flows
-sf-flow activate Flow1 Flow2 Flow3
-
-# Activate with validation
-sf-flow activate MyFlow --validate
-
-# Ignore missing flows
-sf-flow activate Flow1 MissingFlow --ignore-not-found
-```
-
-#### Deactivate Flows
-
-```bash
-# Deactivate flows (requires --force in production)
-sf-flow deactivate MyFlow --force
-
-# Deactivate multiple flows
-sf-flow deactivate Flow1 Flow2 --force
-
-# Validate before deactivation
-sf-flow deactivate MyFlow --validate --force
-```
-
-#### List Flows
+#### Basic Commands
 
 ```bash
 # List all flows
 sf-flow list
 
 # List specific flows
-sf-flow list Flow1 Flow2
+sf-flow list MyScreenFlow MyAutoFlow
 
-# Filter by type
-sf-flow list --type screen
-sf-flow list --type record
-sf-flow list --type scheduled
+# Activate flows
+sf-flow activate MyScreenFlow MyAutoFlow
+
+# Deactivate flows  
+sf-flow deactivate MyScreenFlow MyAutoFlow
+
+# Generate Salesforce URLs
+sf-flow generate-urls MyScreenFlow MyAutoFlow
+
+# Generate Flow Builder URLs
+sf-flow builder-urls MyScreenFlow MyAutoFlow
+```
+
+#### Advanced Usage
+
+```bash
+# Batch operations from file
+sf-flow batch-activate -f flows.txt
 
 # Filter by status
-sf-flow list --status active
 sf-flow list --status inactive
 
-# Output formats
-sf-flow list --format json
-sf-flow list --format csv
-sf-flow list --format table
-```
+# Generate URL list for copying
+sf-flow builder-urls MyScreenFlow MyAutoFlow --url-list
 
-### Batch Operations
+# Export detailed report
+sf-flow generate-urls MyScreenFlow -o report.json
 
-#### From File
-
-Create a flow list file (`flows.json`):
-
-```json
-{
-  "flows": [
-    "Customer_Onboarding_Flow",
-    "Order_Processing_Flow",
-    "Account_Validation_Flow"
-  ]
-}
-```
-
-Or a simple text file (`flows.txt`):
-
-```text
-Customer_Onboarding_Flow
-Order_Processing_Flow
-Account_Validation_Flow
-```
-
-Execute batch operations:
-
-```bash
-# Batch activate from file
-sf-flow batch-activate --file flows.json
-
-# Batch deactivate from file
-sf-flow batch-deactivate --file flows.txt --force
-
-# Dry run to preview changes
-sf-flow batch-activate --file flows.json --dry-run
-
-# Generate detailed report
-sf-flow batch-activate --file flows.json --report activation-report.json
-```
-
-#### From Configuration
-
-```bash
-# Use flows defined in configuration
-sf-flow batch-activate --use-config
-
-# Combine file and config
-sf-flow batch-activate --file flows.json --use-config
-
-# Add additional flows
-sf-flow batch-activate --use-config --flows ExtraFlow1 ExtraFlow2
-```
-
-### Advanced Options
-
-#### Environment Control
-
-```bash
-# Force sandbox environment
-sf-flow list --sandbox
-
-# Force production environment (use with caution)
-sf-flow list --production
-
-# Use custom config file
-sf-flow activate MyFlow --config /path/to/config.json
-```
-
-#### Output Control
-
-```bash
 # Verbose output
-sf-flow activate MyFlow --verbose
-
-# Quiet mode
-sf-flow activate MyFlow --quiet
-
-# Continue on errors
-sf-flow batch-activate --file flows.json --continue-on-error
+sf-flow activate MyScreenFlow --verbose
 ```
 
-#### Safety Features
+### Flow Type Detection
 
+The tool automatically detects flow types and API compatibility:
+
+- ✅ **Screen Flows**: Can be activated via API
+- ✅ **Auto-launched Flows**: Can be activated via API  
+- ⚠️ **Record-Triggered Flows**: Require manual UI activation
+- ⚠️ **Process Builder**: Require manual UI activation
+
+### Examples
+
+#### Example 1: Basic Flow Management
 ```bash
-# Validate flows exist before processing
-sf-flow batch-activate --file flows.json --validate
+# Check flow status
+sf-flow list MyScreenFlow MyAutoFlow
 
-# Show current status during dry run
-sf-flow batch-deactivate --file flows.json --dry-run --show-status
-
-# Show detailed error messages
-sf-flow batch-activate --file flows.json --verbose --show-errors
+# Output:
+# Name           | Type       | Status   | Ver | Latest | Updates
+# MyScreenFlow   | Flow       | Inactive | 0   | 3      | Yes
+# MyAutoFlow     | Flow       | Active   | 2   | 2      | No
 ```
 
-## 📁 File Formats
-
-### JSON Format
-
-```json
-{
-  "flows": [
-    "Flow_Name_1",
-    "Flow_Name_2"
-  ],
-  "environments": {
-    "production": {
-      "flows_to_activate": ["Prod_Flow_1"],
-      "flows_to_deactivate": ["Legacy_Flow"]
-    },
-    "sandbox": {
-      "flows_to_activate": ["Test_Flow_1"],
-      "flows_to_deactivate": ["Old_Test_Flow"]
-    }
-  }
-}
-```
-
-### Text/CSV Format
-
-```text
-# Comments are supported (lines starting with #)
-Flow_Name_1
-Flow_Name_2
-Flow_Name_3
-
-# Grouped flows
-Account_Validation_Flow
-Opportunity_Approval_Flow
-Lead_Assignment_Flow
-```
-
-## 🔐 Authentication Setup
-
-### 认证方式设置 / Authentication Methods
-
-本工具支持两种Salesforce认证方式：JWT Bearer Token Flow（推荐）和OAuth 2.0 Flow。
-
-This tool supports two Salesforce authentication methods: JWT Bearer Token Flow (recommended) and OAuth 2.0 Flow.
-
-#### JWT Bearer Token Flow (推荐 / Recommended)
-
-这是最安全和推荐的认证方式，适合自动化部署和CI/CD环境。
-
-This is the most secure and recommended authentication method, suitable for automated deployments and CI/CD environments.
-
-**步骤1: 创建Connected App / Step 1: Create Connected App**
-
-1. 登录Salesforce / Login to Salesforce
-2. 进入 **Setup** → **App Manager** → **New Connected App** / Go to **Setup** → **App Manager** → **New Connected App**
-3. 启用OAuth Settings / Enable OAuth Settings
-4. 启用"Use digital signatures" / Enable "Use digital signatures"
-5. 上传您的证书 / Upload your certificate
-6. 添加OAuth Scopes: `api`, `refresh_token`, `offline_access` / Add OAuth Scopes: `api`, `refresh_token`, `offline_access`
-
-**步骤2: 生成私钥和证书 / Step 2: Generate Private Key and Certificate**
-
+#### Example 2: URL Generation
 ```bash
-# 生成私钥 / Generate private key
-openssl genpkey -algorithm RSA -out private_key.pem -keylen 2048
+# Generate Flow Builder URLs
+sf-flow builder-urls MyScreenFlow
 
-# 生成证书 / Generate certificate
-openssl req -new -x509 -key private_key.pem -out cert.crt -days 365
+# Output:
+# 📋 MyScreenFlow
+#    Status: Inactive (v0/3)
+#    🔧 Flow Builder: https://instance.my.salesforce.com/builder_platform_interaction/flowBuilder.app?flowId=301xxxxx
 ```
 
-**macOS 用户注意 / macOS Users Note:**
+### API Limitations
 
-如果您在macOS中遇到OpenSSL命令错误，请使用以下替代命令：
+Some flows cannot be activated via API due to Salesforce security restrictions:
 
-If you encounter OpenSSL command errors on macOS, use these alternative commands:
+- **System Context Flows**: Record-triggered flows that run in system context
+- **Process Builder**: Legacy process automation
+- **Certain Auto-launched Flows**: Depending on configuration
 
-```bash
-# macOS 生成私钥 / macOS Generate private key
-openssl genrsa -out private_key.pem 2048
-
-# macOS 生成证书 / macOS Generate certificate
-openssl req -new -x509 -key private_key.pem -out cert.crt -days 365 -subj "/C=US/ST=State/L=City/O=Organization/CN=localhost"
-```
-
-**或者使用更简单的方法 / Or use a simpler method:**
-
-```bash
-# 使用 Homebrew 安装 OpenSSL (如果尚未安装) / Install OpenSSL via Homebrew (if not installed)
-brew install openssl
-
-# 然后使用完整路径 / Then use the full path
-/usr/local/opt/openssl/bin/openssl genpkey -algorithm RSA -out private_key.pem -keylen 2048
-/usr/local/opt/openssl/bin/openssl req -new -x509 -key private_key.pem -out cert.crt -days 365
-```
-
-**步骤3: 上传证书 / Step 3: Upload Certificate**
-
-- 将生成的`cert.crt`文件上传到您的Connected App / Upload the generated `cert.crt` file to your Connected App
-- 记录Consumer Key (Client ID) / Note the Consumer Key (Client ID)
-
-**步骤4: 设置环境变量 / Step 4: Set Environment Variables**
-
-```bash
-export SF_CLIENT_ID="your_consumer_key"
-export SF_USERNAME="your_username"
-export SF_PRIVATE_KEY_PATH="/path/to/private_key.pem"
-export SF_SANDBOX="true"  # 或 "false" 用于生产环境 / or "false" for production
-```
-
-#### OAuth 2.0 Flow (替代方式 / Alternative Method)
-
-**步骤1: 创建Connected App / Step 1: Create Connected App**
-
-1. 启用OAuth Settings / Enable OAuth Settings
-2. 记录Consumer Key和Consumer Secret / Note Consumer Key and Consumer Secret
-3. 添加OAuth Scopes: `api`, `refresh_token` / Add OAuth Scopes: `api`, `refresh_token`
-
-**步骤2: 设置环境变量 / Step 2: Set Environment Variables**
-
-```bash
-export SF_AUTH_METHOD="oauth"
-export SF_CLIENT_ID="your_consumer_key"
-export SF_CLIENT_SECRET="your_consumer_secret"
-export SF_USERNAME="your_username"
-export SF_PASSWORD="your_password"
-export SF_SECURITY_TOKEN="your_security_token"
-```
-
-### 配置文件设置 / Configuration File Setup
-
-您也可以创建配置文件来管理认证信息。在项目根目录创建 `config/default.json`：
-
-You can also create a configuration file to manage authentication information. Create `config/default.json` in the project root:
-
-```json
-{
-  "auth": {
-    "method": "jwt",
-    "clientId": "${SF_CLIENT_ID}",
-    "username": "${SF_USERNAME}",
-    "privateKeyPath": "${SF_PRIVATE_KEY_PATH}",
-    "sandbox": true
-  },
-  "batch": {
-    "maxConcurrent": 3,
-    "rateLimitDelay": 1000,
-    "maxRetries": 3,
-    "timeoutSeconds": 300
-  },
-  "logging": {
-    "level": "info",
-    "format": "structured",
-    "outputFile": "flow-operations.log"
-  }
-}
-```
-
-### 可选配置 / Optional Configuration
-
-您还可以设置以下可选的环境变量：
-
-You can also set the following optional environment variables:
-
-```bash
-# 批处理配置 / Batch processing configuration
-export SF_MAX_CONCURRENT="3"
-export SF_RATE_LIMIT_DELAY="1000"
-export SF_MAX_RETRIES="3"
-
-# 日志配置 / Logging configuration
-export SF_LOG_LEVEL="info"
-```
-
-### 安全注意事项 / Security Considerations
-
-1. **私钥安全 / Private Key Security**: 确保私钥文件权限设置正确，只有您能访问 / Ensure private key file permissions are set correctly, only you can access
-2. **环境变量 / Environment Variables**: 不要在代码中硬编码敏感信息 / Don't hardcode sensitive information in code
-3. **生产环境 / Production Environment**: 在生产环境中使用时要特别小心，确保有适当的权限控制 / Be especially careful when using in production, ensure proper permission controls
-
-### 验证配置 / Verify Configuration
-
-设置完成后，您可以使用以下命令验证配置：
-
-After setup, you can verify the configuration using the following commands:
-
-```bash
-# 测试连接 / Test connection
-node src/index.js list --quiet
-
-# 检查配置 / Check configuration
-node src/index.js config
-
-# 启用调试日志 / Enable debug logging
-node src/index.js activate MyFlow --verbose
-```
-
-## 🛡️ Safety Features
-
-### Production Environment Protection
-
-- **Force Flag Required**: Deactivation in production requires `--force` flag
-- **Confirmation Prompts**: Clear warnings before destructive operations
-- **Environment Indicators**: Visual indicators for sandbox vs production
+For these flows, use the generated URLs to activate manually through the Salesforce UI.
 
 ### Error Handling
 
-- **Automatic Retries**: Configurable retry logic for transient errors
-- **Rate Limiting**: Built-in rate limiting to respect API limits
-- **Graceful Degradation**: Continue processing other flows if some fail
+The tool provides clear error messages:
 
-### Validation
-
-- **Flow Existence Check**: Validate flows exist before processing
-- **Status Verification**: Check current flow status
-- **Dry Run Mode**: Preview changes without execution
-
-## 📊 Logging and Monitoring
-
-### Log Levels
-
-- `error`: Error messages only
-- `warn`: Warnings and errors
-- `info`: General information (default)
-- `debug`: Detailed debugging information
-- `verbose`: Maximum detail
-
-### Log Formats
-
-- `structured`: JSON format for parsing
-- `simple`: Human-readable format
-- `colorized`: Console output with colors
-
-### Log Files
-
-- `flow-operations.log`: Main log file
-- `flow-operations.error.log`: Error-specific logs
-- `flow-operations.exceptions.log`: Unhandled exceptions
-- `flow-operations.rejections.log`: Promise rejections
-
-## 🔧 Troubleshooting
-
-### Common Issues
-
-1. **Authentication Errors**
-   ```
-   Error: JWT authentication failed: invalid_client_id
-   ```
-   - Verify SF_CLIENT_ID is correct
-   - Ensure Connected App is deployed
-   - Check private key format
-
-2. **Permission Errors**
-   ```
-   Error: insufficient access rights on cross-reference id
-   ```
-   - Verify user permissions
-   - Check profile/permission set assignments
-   - Ensure API access is enabled
-
-3. **Flow Not Found**
-   ```
-   Error: Flow 'MyFlow' not found
-   ```
-   - Verify flow API name (not label)
-   - Check if flow exists in target org
-   - Use `sf-flow list` to see available flows
-
-4. **Rate Limiting**
-   ```
-   Error: REQUEST_RUNNING_TOO_LONG
-   ```
-   - Reduce `maxConcurrent` setting
-   - Increase `rateLimitDelay`
-   - Use smaller batch sizes
-
-### Debug Mode
-
-```bash
-# Enable debug logging
-sf-flow activate MyFlow --verbose
-
-# Check configuration
-sf-flow config
-
-# Test connection
-sf-flow list --quiet
+```
+❌ Flow 'RecordTriggeredFlow' cannot be activated via API (system context restriction). 
+   Please use Salesforce UI.
 ```
 
-## 🤝 Contributing
+### Configuration
+
+Configuration files are located in the `config/` directory:
+
+- `default.json`: Default settings
+- `flows.example.json`: Example flow list for batch operations
+
+### Troubleshooting
+
+#### Authentication Issues
+```bash
+# Check current configuration
+sf-flow config
+
+# Re-run OAuth setup
+npm run setup-oauth
+```
+
+#### API Errors
+- Ensure proper permissions for Tooling API access
+- Check if flows exist in the target org
+- Verify environment settings (sandbox vs production)
+
+---
+
+## 中文
+
+### 概述
+
+一个用于大规模管理 Salesforce Flow 的综合命令行界面（CLI）工具。该工具使用 Salesforce Tooling API 提供高效的批量操作，用于激活、停用和监控 Flow 状态。
+
+### 功能特性
+
+- 🚀 **Flow 管理**: 单个或批量激活/停用流程
+- 📊 **状态监控**: 列出所有流程及其版本信息和激活状态
+- 🔗 **URL 生成**: 生成用于手动操作的直接 Salesforce URL
+- 🔧 **Flow Builder URL**: 直接链接到 Flow Builder 进行编辑
+- 🎯 **智能检测**: 自动识别流程类型和 API 兼容性
+- 🔐 **多种认证**: 支持 OAuth 和 JWT 认证
+- ⚡ **批量操作**: 处理多个流程并显示进度跟踪
+- 🛡️ **错误处理**: 强大的重试逻辑和详细的错误报告
+
+### 安装
+
+```bash
+# 克隆仓库
+git clone https://github.com/yourusername/salesforce-flow-cli.git
+cd salesforce-flow-cli
+
+# 安装依赖
+npm install
+
+# 设置认证（推荐使用 OAuth）
+npm run setup-oauth
+```
+
+### 认证设置
+
+#### OAuth 认证（推荐）
+```bash
+# 运行设置脚本
+npm run setup-oauth
+
+# 按照提示配置：
+# - Salesforce 组织 URL
+# - 客户端 ID 和密钥
+# - 重定向 URI
+```
+
+#### JWT 认证
+```bash
+# 创建 .env 文件
+cp .env.example .env
+
+# 在 .env 中配置 JWT 设置
+SALESFORCE_LOGIN_URL=https://login.salesforce.com
+SALESFORCE_CLIENT_ID=your_client_id
+SALESFORCE_USERNAME=your_username
+SALESFORCE_PRIVATE_KEY_PATH=/path/to/private.key
+```
+
+### 使用方法
+
+#### 基本命令
+
+```bash
+# 列出所有流程
+sf-flow list
+
+# 列出特定流程
+sf-flow list 示例屏幕流程 示例自动流程
+
+# 激活流程
+sf-flow activate 示例屏幕流程 示例自动流程
+
+# 停用流程
+sf-flow deactivate 示例屏幕流程 示例自动流程
+
+# 生成 Salesforce URL
+sf-flow generate-urls 示例屏幕流程 示例自动流程
+
+# 生成 Flow Builder URL
+sf-flow builder-urls 示例屏幕流程 示例自动流程
+```
+
+#### 高级用法
+
+```bash
+# 从文件批量操作
+sf-flow batch-activate -f flows.txt
+
+# 按状态筛选
+sf-flow list --status inactive
+
+# 生成用于复制的 URL 列表
+sf-flow builder-urls 示例屏幕流程 示例自动流程 --url-list
+
+# 导出详细报告
+sf-flow generate-urls 示例屏幕流程 -o report.json
+
+# 详细输出
+sf-flow activate 示例屏幕流程 --verbose
+```
+
+### 流程类型检测
+
+工具会自动检测流程类型和 API 兼容性：
+
+- ✅ **屏幕流程**: 可通过 API 激活
+- ✅ **自动启动流程**: 可通过 API 激活
+- ⚠️ **记录触发流程**: 需要手动 UI 激活
+- ⚠️ **流程构建器**: 需要手动 UI 激活
+
+### 示例
+
+#### 示例 1: 基本流程管理
+```bash
+# 检查流程状态
+sf-flow list 示例屏幕流程 示例自动流程
+
+# 输出:
+# 名称           | 类型       | 状态     | 版本 | 最新版本 | 更新
+# 示例屏幕流程   | Flow       | 未激活   | 0    | 3        | 是
+# 示例自动流程   | Flow       | 激活     | 2    | 2        | 否
+```
+
+#### 示例 2: URL 生成
+```bash
+# 生成 Flow Builder URL
+sf-flow builder-urls 示例屏幕流程
+
+# 输出:
+# 📋 示例屏幕流程
+#    状态: 未激活 (v0/3)
+#    🔧 Flow Builder: https://instance.my.salesforce.com/builder_platform_interaction/flowBuilder.app?flowId=301xxxxx
+```
+
+### API 限制
+
+由于 Salesforce 安全限制，某些流程无法通过 API 激活：
+
+- **系统上下文流程**: 在系统上下文中运行的记录触发流程
+- **流程构建器**: 传统流程自动化
+- **某些自动启动流程**: 取决于配置
+
+对于这些流程，请使用生成的 URL 通过 Salesforce UI 手动激活。
+
+### 错误处理
+
+工具提供清晰的错误消息：
+
+```
+❌ 流程 '记录触发流程' 无法通过 API 激活（系统上下文限制）。
+   请使用 Salesforce UI。
+```
+
+### 故障排除
+
+#### 认证问题
+```bash
+# 检查当前配置
+sf-flow config
+
+# 重新运行 OAuth 设置
+npm run setup-oauth
+```
+
+#### API 错误
+- 确保拥有 Tooling API 访问的适当权限
+- 检查流程是否存在于目标组织中
+- 验证环境设置（沙盒 vs 生产）
+
+---
+
+## 日本語
+
+### 概要
+
+Salesforce Flow を大規模に管理するための包括的なコマンドラインインターフェース（CLI）ツールです。このツールは Salesforce Tooling API を使用して、Flow の有効化、無効化、ステータス監視のための効率的なバッチ操作を提供します。
+
+### 機能
+
+- 🚀 **Flow 管理**: フローの個別またはバッチでの有効化/無効化
+- 📊 **ステータス監視**: すべてのフローをバージョン情報と有効化ステータスで一覧表示
+- 🔗 **URL 生成**: 手動操作用の直接 Salesforce URL を生成
+- 🔧 **Flow Builder URL**: 編集用の Flow Builder への直接リンク
+- 🎯 **スマート検出**: フロータイプと API 互換性を自動識別
+- 🔐 **複数認証**: OAuth と JWT 認証をサポート
+- ⚡ **バッチ操作**: 進行状況追跡で複数フローを処理
+- 🛡️ **エラーハンドリング**: 堅牢な再試行ロジックと詳細なエラーレポート
+
+### インストール
+
+```bash
+# リポジトリをクローン
+git clone https://github.com/yourusername/salesforce-flow-cli.git
+cd salesforce-flow-cli
+
+# 依存関係をインストール
+npm install
+
+# 認証を設定（OAuth 推奨）
+npm run setup-oauth
+```
+
+### 認証設定
+
+#### OAuth 認証（推奨）
+```bash
+# 設定スクリプトを実行
+npm run setup-oauth
+
+# プロンプトに従って設定：
+# - Salesforce 組織 URL
+# - クライアント ID とシークレット
+# - リダイレクト URI
+```
+
+#### JWT 認証
+```bash
+# .env ファイルを作成
+cp .env.example .env
+
+# .env で JWT 設定を構成
+SALESFORCE_LOGIN_URL=https://login.salesforce.com
+SALESFORCE_CLIENT_ID=your_client_id
+SALESFORCE_USERNAME=your_username
+SALESFORCE_PRIVATE_KEY_PATH=/path/to/private.key
+```
+
+### 使用方法
+
+#### 基本コマンド
+
+```bash
+# すべてのフローを一覧表示
+sf-flow list
+
+# 特定のフローを一覧表示
+sf-flow list サンプル画面フロー サンプル自動フロー
+
+# フローを有効化
+sf-flow activate サンプル画面フロー サンプル自動フロー
+
+# フローを無効化
+sf-flow deactivate サンプル画面フロー サンプル自動フロー
+
+# Salesforce URL を生成
+sf-flow generate-urls サンプル画面フロー サンプル自動フロー
+
+# Flow Builder URL を生成
+sf-flow builder-urls サンプル画面フロー サンプル自動フロー
+```
+
+#### 高度な使用法
+
+```bash
+# ファイルからバッチ操作
+sf-flow batch-activate -f flows.txt
+
+# ステータスでフィルタ
+sf-flow list --status inactive
+
+# コピー用 URL リストを生成
+sf-flow builder-urls サンプル画面フロー サンプル自動フロー --url-list
+
+# 詳細レポートをエクスポート
+sf-flow generate-urls サンプル画面フロー -o report.json
+
+# 詳細出力
+sf-flow activate サンプル画面フロー --verbose
+```
+
+### フロータイプ検出
+
+ツールは自動的にフロータイプと API 互換性を検出します：
+
+- ✅ **画面フロー**: API 経由で有効化可能
+- ✅ **自動起動フロー**: API 経由で有効化可能
+- ⚠️ **レコードトリガーフロー**: 手動 UI 有効化が必要
+- ⚠️ **プロセスビルダー**: 手動 UI 有効化が必要
+
+### 例
+
+#### 例 1: 基本的なフロー管理
+```bash
+# フローステータスを確認
+sf-flow list サンプル画面フロー サンプル自動フロー
+
+# 出力:
+# 名前               | タイプ     | ステータス | Ver | 最新 | 更新
+# サンプル画面フロー | Flow       | 無効       | 0   | 3    | あり
+# サンプル自動フロー | Flow       | 有効       | 2   | 2    | なし
+```
+
+#### 例 2: URL 生成
+```bash
+# Flow Builder URL を生成
+sf-flow builder-urls サンプル画面フロー
+
+# 出力:
+# 📋 サンプル画面フロー
+#    ステータス: 無効 (v0/3)
+#    🔧 Flow Builder: https://instance.my.salesforce.com/builder_platform_interaction/flowBuilder.app?flowId=301xxxxx
+```
+
+### API 制限
+
+Salesforce のセキュリティ制限により、一部のフローは API 経由で有効化できません：
+
+- **システムコンテキストフロー**: システムコンテキストで実行されるレコードトリガーフロー
+- **プロセスビルダー**: レガシープロセス自動化
+- **特定の自動起動フロー**: 構成による
+
+これらのフローについては、生成された URL を使用して Salesforce UI から手動で有効化してください。
+
+### エラーハンドリング
+
+ツールは明確なエラーメッセージを提供します：
+
+```
+❌ フロー 'レコードトリガーフロー' は API 経由で有効化できません（システムコンテキスト制限）。
+   Salesforce UI をご使用ください。
+```
+
+### トラブルシューティング
+
+#### 認証問題
+```bash
+# 現在の構成を確認
+sf-flow config
+
+# OAuth 設定を再実行
+npm run setup-oauth
+```
+
+#### API エラー
+- Tooling API アクセスの適切な権限があることを確認
+- 対象組織にフローが存在することを確認
+- 環境設定を検証（サンドボックス vs 本番）
+
+---
+
+## License
+
+MIT License - see LICENSE file for details.
+
+## Contributing
 
 1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests for new functionality
-5. Run the test suite: `npm test`
-6. Submit a pull request
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-## 📄 License
+## Support
 
-MIT License - see LICENSE file for details
-
-## 🆘 Support
-
-- Check the troubleshooting section above
-- Review logs for detailed error information
-- Ensure proper authentication setup
-- Verify Salesforce permissions
-
-For additional support, please refer to the Salesforce Tooling API documentation and Connected App setup guides.
+For issues and questions:
+- Create an issue on GitHub
+- Check the troubleshooting section
+- Review Salesforce Tooling API documentation
