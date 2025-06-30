@@ -25,7 +25,7 @@ A comprehensive command-line interface (CLI) tool for managing Salesforce Flows 
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/salesforce-flow-cli.git
+git clone https://github.com/sunyxi/salesforce-flow-cli.git
 cd salesforce-flow-cli
 
 # Install dependencies
@@ -201,7 +201,7 @@ npm run setup-oauth
 
 ```bash
 # 克隆仓库
-git clone https://github.com/yourusername/salesforce-flow-cli.git
+git clone https://github.com/sunyxi/salesforce-flow-cli.git
 cd salesforce-flow-cli
 
 # 安装依赖
@@ -370,7 +370,7 @@ Salesforce Flow を大規模に管理するための包括的なコマンドラ�
 
 ```bash
 # リポジトリをクローン
-git clone https://github.com/yourusername/salesforce-flow-cli.git
+git clone https://github.com/sunyxi/salesforce-flow-cli.git
 cd salesforce-flow-cli
 
 # 依存関係をインストール
