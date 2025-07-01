@@ -30,6 +30,7 @@ cd salesforce-flow-cli
 
 # Install dependencies
 npm install
+npm link
 
 # Setup authentication (OAuth recommended)
 npm run setup-oauth
@@ -206,6 +207,7 @@ cd salesforce-flow-cli
 
 # 安装依赖
 npm install
+npm link
 
 # 设置认证（推荐使用 OAuth）
 npm run setup-oauth
@@ -375,7 +377,7 @@ cd salesforce-flow-cli
 
 # 依存関係をインストール
 npm install
-
+npm link
 # 認証を設定（OAuth 推奨）
 npm run setup-oauth
 ```
