@@ -1,0 +1,19 @@
+{
+    "flows": [
+        {
+            "name": "MyScreenFlow",
+            "version": 3
+        },
+        {
+            "name": "MyAutoFlow",
+            "version": 5
+        },
+        {
+            "name": "RecordTriggeredFlow",
+            "version": 2
+        },
+        {
+            "name": "ScheduledFlow"
+        }
+    ]
+}

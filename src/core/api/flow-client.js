@@ -159,7 +159,7 @@ class FlowClient {
         return 'Flow';
     }
 
-    async activateFlow(flowApiName) {
+    async activateFlow(flowApiName, targetVersion = null) {
         try {
             // Get flow definition with version info
             const flowDef = await this.getFlowDefinition(flowApiName);
@@ -168,7 +168,10 @@ class FlowClient {
             const currentActiveVersion = flowDef.ActiveVersion?.VersionNumber || 0;
             const { latestVersion, definitionId } = versionInfo;
             
-            if (currentActiveVersion === latestVersion && currentActiveVersion > 0) {
+            // Determine which version to activate
+            const versionToActivate = targetVersion !== null ? targetVersion : latestVersion;
+            
+            if (currentActiveVersion === versionToActivate && currentActiveVersion > 0) {
                 return {
                     success: true,
                     message: `Flow '${flowApiName}' is already active (version ${currentActiveVersion})`,
@@ -184,13 +187,22 @@ class FlowClient {
                 };
             }
 
+            // Validate target version exists
+            if (targetVersion !== null && targetVersion > latestVersion) {
+                return {
+                    success: false,
+                    message: `Flow '${flowApiName}' does not have version ${targetVersion} (latest: ${latestVersion})`,
+                    error: 'Version not found'
+                };
+            }
+
             // Use the DefinitionId from the Flow query if available, otherwise use FlowDefinition Id
             const targetDefinitionId = definitionId || flowDef.Id;
 
             // Use Metadata API approach to activate flow with specific version number
             const updateData = {
                 Metadata: {
-                    activeVersionNumber: latestVersion
+                    activeVersionNumber: versionToActivate
                 }
             };
 
@@ -198,10 +210,10 @@ class FlowClient {
 
             return {
                 success: true,
-                message: `Flow '${flowApiName}' activated successfully (version ${latestVersion})`,
+                message: `Flow '${flowApiName}' activated successfully (version ${versionToActivate})`,
                 wasAlreadyActive: false,
                 previousVersion: currentActiveVersion,
-                newVersion: latestVersion
+                newVersion: versionToActivate
             };
         } catch (error) {
             // Check for system context flows that cannot be activated via API

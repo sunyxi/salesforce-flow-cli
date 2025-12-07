@@ -8,6 +8,7 @@ const deactivateCommand = require('./commands/deactivate');
 const listCommand = require('./commands/list');
 const batchCommand = require('./commands/batch');
 const generateUrlsCommand = require('./commands/generate-urls');
+const getActiveVersionsCommand = require('./commands/get-active-versions');
 
 const program = new Command();
 
@@ -27,12 +28,12 @@ program
         try {
             // Initialize configuration
             config = new ConfigManager();
-            
+
             // Load additional config if specified
             if (thisCommand.opts().config) {
                 config.loadFlowsFromFile(thisCommand.opts().config);
             }
-            
+
             // Override environment settings
             if (thisCommand.opts().sandbox) {
                 config.set('auth.sandbox', true);
@@ -40,7 +41,7 @@ program
             if (thisCommand.opts().production) {
                 config.set('auth.sandbox', false);
             }
-            
+
             // Set logging level based on verbosity
             if (thisCommand.opts().verbose) {
                 config.set('logging.level', 'debug');
@@ -51,18 +52,18 @@ program
                 config.set('cli.showProgressBar', false);
                 config.set('cli.showDetailedOutput', false);
             }
-            
+
             // Display environment info
             const env = config.get('auth.sandbox') ? 'SANDBOX' : 'PRODUCTION';
             const envColor = config.get('auth.sandbox') ? chalk.yellow : chalk.red;
-            
+
             if (!thisCommand.opts().quiet) {
                 console.log(chalk.blue('🚀 Salesforce Flow CLI'));
                 console.log(`${chalk.bold('Environment:')} ${envColor(env)}`);
                 console.log(`${chalk.bold('Auth Method:')} ${config.get('auth.method').toUpperCase()}`);
                 console.log('');
             }
-            
+
         } catch (error) {
             console.error(chalk.red(`❌ Configuration error: ${error.message}`));
             process.exit(1);
@@ -109,6 +110,7 @@ program
     .option('-f, --file <path>', 'Load flows from file (JSON, TXT, or CSV)')
     .option('--use-config', 'Use flows from configuration file')
     .option('--flows <flows...>', 'Additional flows to activate')
+    .option('--version <number>', 'Specify version number to activate (default: latest)')
     .option('--validate', 'Validate that flows exist before activation')
     .option('--ignore-not-found', 'Continue if some flows are not found')
     .option('--dry-run', 'Show what would be done without making changes')
@@ -127,6 +129,7 @@ program
     .option('-f, --file <path>', 'Load flows from file (JSON, TXT, or CSV)')
     .option('--use-config', 'Use flows from configuration file')
     .option('--flows <flows...>', 'Additional flows to deactivate')
+    .option('--version <number>', 'Specify version number (for future use)')
     .option('--validate', 'Validate that flows exist before deactivation')
     .option('--ignore-not-found', 'Continue if some flows are not found')
     .option('--force', 'Force deactivation in production environment')
@@ -157,6 +160,21 @@ program
     .option('--url-list', 'Show plain URL list for easy copying')
     .action(async (flows, options) => {
         await generateUrlsCommand(flows, { ...program.opts(), ...options, builderOnly: true }, config);
+    });
+
+// Get active versions command
+program
+    .command('get-active-versions [flows...]')
+    .description('Get active versions of flows')
+    .option('-f, --file <path>', 'Load flows from file (JSON, TXT, or CSV)')
+    .option('--use-config', 'Use flows from configuration file')
+    .option('--all', 'Get all flows in the org')
+    .option('-s, --status <status>', 'Filter by status (active, inactive)')
+    .option('--updates-available', 'Show only flows with newer versions available')
+    .option('--format <format>', 'Output format (table, simple, detailed, json, csv, txt)', 'table')
+    .option('-o, --output <path>', 'Export results to file')
+    .action(async (flows, options) => {
+        await getActiveVersionsCommand({ ...program.opts(), ...options, flows }, config);
     });
 
 // Config command

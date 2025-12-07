@@ -9,7 +9,7 @@ class BatchFlowProcessor {
         this.retryHandler = options.retryHandler || RetryHandler.createDefault();
         this.logger = options.logger || console;
         this.progressCallback = options.progressCallback || null;
-        
+
         // Statistics
         this.stats = {
             total: 0,
@@ -34,32 +34,32 @@ class BatchFlowProcessor {
         };
 
         this.logger.info(`Starting batch ${operationName} for ${flowNames.length} flows`);
-        
+
         const results = [];
-        
+
         // Process flows in chunks to respect rate limits
         for (let i = 0; i < flowNames.length; i += this.maxConcurrent) {
             const chunk = flowNames.slice(i, i + this.maxConcurrent);
             const chunkNumber = Math.floor(i / this.maxConcurrent) + 1;
             const totalChunks = Math.ceil(flowNames.length / this.maxConcurrent);
-            
+
             this.logger.info(`Processing chunk ${chunkNumber}/${totalChunks} (${chunk.length} flows)`);
-            
+
             // Process chunk in parallel
-            const chunkPromises = chunk.map(flowName => 
+            const chunkPromises = chunk.map(flowName =>
                 this.processFlowWithRetry(flowName, operation, operationName)
             );
-            
+
             try {
                 const chunkResults = await Promise.allSettled(chunkPromises);
-                
+
                 chunkResults.forEach((result, index) => {
                     const flowName = chunk[index];
-                    
+
                     if (result.status === 'fulfilled') {
                         const flowResult = result.value;
                         results.push(flowResult);
-                        
+
                         if (flowResult.success) {
                             this.stats.completed++;
                             if (flowResult.wasAlreadyActive || flowResult.wasAlreadyInactive) {
@@ -79,7 +79,7 @@ class BatchFlowProcessor {
                             message: `Failed to ${operationName} flow '${flowName}': ${result.reason.message}`,
                             error: result.reason.message
                         };
-                        
+
                         results.push(errorResult);
                         this.stats.failed++;
                         this.stats.errors.push({
@@ -87,7 +87,7 @@ class BatchFlowProcessor {
                             error: result.reason.message
                         });
                     }
-                    
+
                     // Report progress if callback provided
                     if (this.progressCallback) {
                         this.progressCallback({
@@ -101,16 +101,16 @@ class BatchFlowProcessor {
                         });
                     }
                 });
-                
+
                 // Rate limiting delay between chunks
                 if (i + this.maxConcurrent < flowNames.length && this.rateLimitDelay > 0) {
                     this.logger.debug(`Waiting ${this.rateLimitDelay}ms before next chunk...`);
                     await this.sleep(this.rateLimitDelay);
                 }
-                
+
             } catch (error) {
                 this.logger.error(`Batch processing error in chunk ${chunkNumber}: ${error.message}`);
-                
+
                 // Add failed results for the entire chunk
                 chunk.forEach(flowName => {
                     results.push({
@@ -123,13 +123,13 @@ class BatchFlowProcessor {
                 });
             }
         }
-        
+
         this.stats.endTime = Date.now();
         const duration = this.stats.endTime - this.stats.startTime;
-        
+
         this.logger.info(`Batch ${operationName} completed in ${duration}ms`);
         this.logger.info(`Results: ${this.stats.completed} successful, ${this.stats.failed} failed, ${this.stats.skipped} skipped`);
-        
+
         return {
             results: results,
             stats: this.stats,
@@ -146,7 +146,7 @@ class BatchFlowProcessor {
 
     async processFlowWithRetry(flowName, operation, operationName) {
         const context = `${operationName} flow '${flowName}'`;
-        
+
         return await this.retryHandler.executeWithRetry(
             async () => {
                 // Add timeout to the operation
@@ -167,14 +167,31 @@ class BatchFlowProcessor {
                 reject(new Error(timeoutMessage));
             }, timeoutMs);
         });
-        
+
         return Promise.race([promise, timeoutPromise]);
     }
 
-    async activateFlows(flowNames) {
+    async activateFlows(flowNames, targetVersion = null) {
         return await this.processBatch(
             flowNames,
-            async (flowName) => await this.flowClient.activateFlow(flowName),
+            async (flowName) => await this.flowClient.activateFlow(flowName, targetVersion),
+            'activate'
+        );
+    }
+
+    async activateFlowsWithVersions(flowsData, globalVersion = null) {
+        // flowsData is an array of { name, version } objects
+        // If a flow has version: null, use globalVersion
+        const flowNames = flowsData.map(f => f.name);
+
+        return await this.processBatch(
+            flowNames,
+            async (flowName) => {
+                // Find the flow data for this flow
+                const flowData = flowsData.find(f => f.name === flowName);
+                const targetVersion = flowData && flowData.version !== null ? flowData.version : globalVersion;
+                return await this.flowClient.activateFlow(flowName, targetVersion);
+            },
             'activate'
         );
     }
@@ -198,11 +215,11 @@ class BatchFlowProcessor {
     // Validation methods
     async validateFlowsExist(flowNames) {
         this.logger.info(`Validating ${flowNames.length} flows exist...`);
-        
+
         const validationResults = await this.flowClient.validateFlowsExist(flowNames);
         const existingFlows = [];
         const nonExistentFlows = [];
-        
+
         for (const [flowName, exists] of Object.entries(validationResults)) {
             if (exists) {
                 existingFlows.push(flowName);
@@ -210,13 +227,13 @@ class BatchFlowProcessor {
                 nonExistentFlows.push(flowName);
             }
         }
-        
+
         if (nonExistentFlows.length > 0) {
             this.logger.warn(`${nonExistentFlows.length} flows not found: ${nonExistentFlows.join(', ')}`);
         }
-        
+
         this.logger.info(`${existingFlows.length} flows validated successfully`);
-        
+
         return {
             existingFlows,
             nonExistentFlows,

@@ -1,0 +1,13 @@
+# Example flows for testing
+# Format: FlowName or FlowName:Version
+# Lines starting with # are comments
+
+# Flows with specific versions
+MyScreenFlow:3
+MyAutoFlow:5
+RecordTriggeredFlow:2
+
+# Flows without version (will use latest or global --version option)
+ScheduledFlow
+AnotherFlow
+

@@ -91,6 +91,21 @@ sf-flow builder-urls MyScreenFlow MyAutoFlow
 # Batch operations from file
 sf-flow batch-activate -f flows.txt
 
+# Activate flows with specific version
+sf-flow batch-activate -f flows.txt --version 3
+
+# Get active versions of all flows
+sf-flow get-active-versions --all
+
+# Get active versions of specific flows
+sf-flow get-active-versions Flow1 Flow2 Flow3
+
+# Get active versions from file and export to CSV
+sf-flow get-active-versions -f flows.txt -o versions.csv --format csv
+
+# Show only flows with updates available
+sf-flow get-active-versions --all --updates-available
+
 # Filter by status
 sf-flow list --status inactive
 
@@ -103,6 +118,41 @@ sf-flow generate-urls MyScreenFlow -o report.json
 # Verbose output
 sf-flow activate MyScreenFlow --verbose
 ```
+
+### File Formats for Batch Operations
+
+The tool supports multiple file formats for specifying flows with individual versions:
+
+#### Text File Format (.txt)
+```text
+# Format: FlowName or FlowName:Version
+# Lines starting with # are comments
+
+# Flows with specific versions
+MyScreenFlow:3
+MyAutoFlow:5
+RecordTriggeredFlow:2
+
+# Flows without version (will use latest or global --version)
+ScheduledFlow
+AnotherFlow
+```
+
+#### JSON File Format (.json)
+```json
+{
+  "flows": [
+    { "name": "MyScreenFlow", "version": 3 },
+    { "name": "MyAutoFlow", "version": 5 },
+    { "name": "RecordTriggeredFlow", "version": 2 },
+    { "name": "ScheduledFlow" }
+  ]
+}
+```
+
+**Note**: Flows without a version specified will use:
+1. The `--version` option if provided
+2. The latest version if no `--version` option
 
 ### Flow Type Detection
 
@@ -268,6 +318,21 @@ sf-flow builder-urls 示例屏幕流程 示例自动流程
 # 从文件批量操作
 sf-flow batch-activate -f flows.txt
 
+# 激活指定版本的流程
+sf-flow batch-activate -f flows.txt --version 3
+
+# 获取所有流程的有效版本
+sf-flow get-active-versions --all
+
+# 获取特定流程的有效版本
+sf-flow get-active-versions 流程1 流程2 流程3
+
+# 从文件获取有效版本并导出为 CSV
+sf-flow get-active-versions -f flows.txt -o versions.csv --format csv
+
+# 仅显示有可用更新的流程
+sf-flow get-active-versions --all --updates-available
+
 # 按状态筛选
 sf-flow list --status inactive
 
@@ -280,6 +345,41 @@ sf-flow generate-urls 示例屏幕流程 -o report.json
 # 详细输出
 sf-flow activate 示例屏幕流程 --verbose
 ```
+
+### 批量操作的文件格式
+
+工具支持多种文件格式来指定带有各自版本的流程:
+
+#### 文本文件格式 (.txt)
+```text
+# 格式: 流程名 或 流程名:版本
+# 以 # 开头的行是注释
+
+# 带有指定版本的流程
+示例屏幕流程:3
+示例自动流程:5
+记录触发流程:2
+
+# 不带版本的流程(将使用最新版本或全局 --version 选项)
+定时流程
+另一个流程
+```
+
+#### JSON 文件格式 (.json)
+```json
+{
+  "flows": [
+    { "name": "示例屏幕流程", "version": 3 },
+    { "name": "示例自动流程", "version": 5 },
+    { "name": "记录触发流程", "version": 2 },
+    { "name": "定时流程" }
+  ]
+}
+```
+
+**注意**: 未指定版本的流程将使用:
+1. 如果提供了 `--version` 选项,则使用该版本
+2. 如果没有 `--version` 选项,则使用最新版本
 
 ### 流程类型检测
 
@@ -437,6 +537,21 @@ sf-flow builder-urls サンプル画面フロー サンプル自動フロー
 # ファイルからバッチ操作
 sf-flow batch-activate -f flows.txt
 
+# 指定バージョンでフローを有効化
+sf-flow batch-activate -f flows.txt --version 3
+
+# すべてのフローの有効バージョンを取得
+sf-flow get-active-versions --all
+
+# 特定のフローの有効バージョンを取得
+sf-flow get-active-versions フロー1 フロー2 フロー3
+
+# ファイルから有効バージョンを取得して CSV にエクスポート
+sf-flow get-active-versions -f flows.txt -o versions.csv --format csv
+
+# 更新可能なフローのみを表示
+sf-flow get-active-versions --all --updates-available
+
 # ステータスでフィルタ
 sf-flow list --status inactive
 
@@ -449,6 +564,41 @@ sf-flow generate-urls サンプル画面フロー -o report.json
 # 詳細出力
 sf-flow activate サンプル画面フロー --verbose
 ```
+
+### バッチ操作のファイル形式
+
+ツールは個別のバージョンを指定したフローを記述する複数のファイル形式をサポートしています:
+
+#### テキストファイル形式 (.txt)
+```text
+# 形式: フロー名 または フロー名:バージョン
+# # で始まる行はコメント
+
+# 特定バージョンを持つフロー
+サンプル画面フロー:3
+サンプル自動フロー:5
+レコードトリガーフロー:2
+
+# バージョン指定なしのフロー(最新版またはグローバル --version オプションを使用)
+定時フロー
+別のフロー
+```
+
+#### JSON ファイル形式 (.json)
+```json
+{
+  "flows": [
+    { "name": "サンプル画面フロー", "version": 3 },
+    { "name": "サンプル自動フロー", "version": 5 },
+    { "name": "レコードトリガーフロー", "version": 2 },
+    { "name": "定時フロー" }
+  ]
+}
+```
+
+**注意**: バージョンが指定されていないフローは以下を使用します:
+1. `--version` オプションが提供されている場合はそのバージョン
+2. `--version` オプションがない場合は最新バージョン
 
 ### フロータイプ検出
 

@@ -9,126 +9,156 @@ const chalk = require('chalk');
 
 async function batchCommand(operation, options, config) {
     const logger = new Logger(config.getLoggingConfig());
-    
+
     try {
         logger.info(`Starting batch ${operation} operation`);
-        
+
         // Load flows from various sources
-        let flows = [];
-        
+        let flowsData = [];
+
         // From file
         if (options.file) {
-            flows = await loadFlowsFromFile(options.file);
-            console.log(chalk.blue(`📄 Loaded ${flows.length} flows from file: ${options.file}`));
+            flowsData = await loadFlowsFromFile(options.file);
+            console.log(chalk.blue(`📄 Loaded ${flowsData.length} flows from file: ${options.file}`));
         }
-        
+
         // From config
         if (options.useConfig) {
             const configFlows = config.getEnvironmentFlows();
-            flows = flows.concat(configFlows);
+            // Convert to flow data format
+            const configFlowsData = configFlows.map(name => ({ name, version: null }));
+            flowsData = flowsData.concat(configFlowsData);
             console.log(chalk.blue(`⚙️  Loaded ${configFlows.length} flows from configuration`));
         }
-        
+
         // From command line arguments
         if (options.flows && options.flows.length > 0) {
-            flows = flows.concat(options.flows);
+            // Convert to flow data format
+            const cmdFlowsData = options.flows.map(name => ({ name, version: null }));
+            flowsData = flowsData.concat(cmdFlowsData);
             console.log(chalk.blue(`💻 Added ${options.flows.length} flows from command line`));
         }
-        
-        // Remove duplicates
-        flows = [...new Set(flows)];
-        
-        if (flows.length === 0) {
+
+        // Remove duplicates by flow name
+        const uniqueFlowsMap = new Map();
+        flowsData.forEach(flowData => {
+            if (!uniqueFlowsMap.has(flowData.name)) {
+                uniqueFlowsMap.set(flowData.name, flowData);
+            } else {
+                // If duplicate, prefer the one with a version specified
+                const existing = uniqueFlowsMap.get(flowData.name);
+                if (flowData.version !== null && existing.version === null) {
+                    uniqueFlowsMap.set(flowData.name, flowData);
+                }
+            }
+        });
+
+        flowsData = Array.from(uniqueFlowsMap.values());
+
+        if (flowsData.length === 0) {
             console.error(chalk.red('❌ No flows specified. Use --file, --use-config, or provide flow names'));
             process.exit(1);
         }
-        
-        console.log(chalk.blue(`📊 Total unique flows to process: ${flows.length}`));
-        
+
+        console.log(chalk.blue(`📊 Total unique flows to process: ${flowsData.length}`));
+
+        // Check if any flows have individual versions specified
+        const flowsWithVersions = flowsData.filter(f => f.version !== null);
+        if (flowsWithVersions.length > 0) {
+            console.log(chalk.blue(`📌 ${flowsWithVersions.length} flows have specific versions:`));
+            flowsWithVersions.forEach(f => {
+                console.log(`   - ${f.name}: v${f.version}`);
+            });
+        }
+
         // Initialize authentication
         const authManager = new AuthManager(config.getConfig());
         await authManager.authenticate();
         logger.logAuthAttempt(config.get('auth.method'), true);
-        
+
         // Initialize Flow client
         const flowClient = new FlowClient(authManager);
-        
+
         // Initialize batch processor
         const batchProcessor = new BatchFlowProcessor(flowClient, {
             ...config.getBatchConfig(),
             logger
         });
-        
+
+        // Extract flow names for validation
+        const flowNames = flowsData.map(f => f.name);
+
         // Validate flows exist (if requested)
         if (options.validate) {
             console.log(chalk.blue('🔍 Validating flows exist...'));
-            const validation = await batchProcessor.validateFlowsExist(flows);
-            logger.logValidation(flows, validation);
-            
+            const validation = await batchProcessor.validateFlowsExist(flowNames);
+            logger.logValidation(flowNames, validation);
+
             if (validation.nonExistentFlows.length > 0) {
                 console.log(chalk.yellow(`⚠️  ${validation.nonExistentFlows.length} flows not found:`));
                 validation.nonExistentFlows.forEach(flow => {
                     console.log(`   - ${flow}`);
                 });
-                
+
                 if (options.ignoreNotFound) {
                     console.log(chalk.yellow('   Continuing with existing flows...'));
-                    flows = validation.existingFlows;
+                    flowsData = flowsData.filter(f => validation.existingFlows.includes(f.name));
                 } else {
                     console.error(chalk.red('❌ Aborting due to missing flows'));
                     process.exit(1);
                 }
             }
         }
-        
-        if (flows.length === 0) {
+
+        if (flowsData.length === 0) {
             console.log(chalk.yellow('⚠️  No valid flows to process'));
             return;
         }
-        
+
         // Safety checks for production deactivation
         if (operation === 'deactivate' && config.isProduction() && !options.force) {
             console.log(chalk.red.bold('🚨 PRODUCTION DEACTIVATION WARNING'));
             console.log(chalk.yellow('   You are about to deactivate flows in PRODUCTION'));
-            console.log(chalk.yellow(`   This will affect ${flows.length} flows and may impact business processes`));
+            console.log(chalk.yellow(`   This will affect ${flowsData.length} flows and may impact business processes`));
             console.log(chalk.yellow('   Use --force flag to confirm this action'));
             console.log(chalk.red('\n❌ Aborting batch deactivation (use --force to override)'));
             process.exit(1);
         }
-        
+
         // Create summary report before processing
         if (options.dryRun) {
             console.log(chalk.cyan('\n🧪 DRY RUN MODE - No changes will be made'));
-            console.log(chalk.blue(`📋 Would ${operation} the following ${flows.length} flows:`));
-            flows.forEach((flow, index) => {
-                console.log(`   ${index + 1}. ${flow}`);
+            console.log(chalk.blue(`📋 Would ${operation} the following ${flowsData.length} flows:`));
+            flowsData.forEach((flowData, index) => {
+                const versionInfo = flowData.version !== null ? ` (version ${flowData.version})` : '';
+                console.log(`   ${index + 1}. ${flowData.name}${versionInfo}`);
             });
-            
+
             // Show current status if requested
             if (options.showStatus) {
                 console.log(chalk.blue('\n📊 Current Status:'));
-                const statusResult = await batchProcessor.getFlowStatuses(flows);
+                const statusResult = await batchProcessor.getFlowStatuses(flowNames);
                 statusResult.results.forEach(result => {
                     if (result.success) {
-                        const status = result.isActive ? 
-                            chalk.green('Active') : 
+                        const status = result.isActive ?
+                            chalk.green('Active') :
                             chalk.red('Inactive');
                         console.log(`   ${result.flowDefinition.DeveloperName}: ${status} (v${result.activeVersion})`);
                     }
                 });
             }
-            
+
             console.log(chalk.cyan('\n✅ Dry run completed - no changes made'));
             return;
         }
-        
+
         // Initialize progress tracker
-        const progressTracker = ProgressTracker.createForBatch(flows.length, {
+        const progressTracker = ProgressTracker.createForBatch(flowsData.length, {
             logger,
             showProgressBar: !options.quiet && config.get('cli.showProgressBar'),
             showDetailedOutput: !options.quiet && config.get('cli.showDetailedOutput')
         });
-        
+
         // Setup progress callback
         batchProcessor.progressCallback = (progress) => {
             progressTracker.updateProgress(
@@ -139,32 +169,43 @@ async function batchCommand(operation, options, config) {
                 false
             );
         };
-        
-        console.log(chalk.blue(`🚀 Starting batch ${operation} of ${flows.length} flows...`));
-        
+
+        console.log(chalk.blue(`🚀 Starting batch ${operation} of ${flowsData.length} flows...`));
+
+        // Parse global version option if provided (fallback for flows without specific version)
+        let globalVersion = null;
+        if (options.version) {
+            globalVersion = parseInt(options.version, 10);
+            if (isNaN(globalVersion) || globalVersion < 0) {
+                console.error(chalk.red(`❌ Invalid version number: ${options.version}`));
+                process.exit(1);
+            }
+            console.log(chalk.blue(`📌 Global fallback version: ${globalVersion}`));
+        }
+
         // Execute batch operation
         let result;
         if (operation === 'activate') {
-            result = await batchProcessor.activateFlows(flows);
+            result = await batchProcessor.activateFlowsWithVersions(flowsData, globalVersion);
         } else if (operation === 'deactivate') {
-            result = await batchProcessor.deactivateFlows(flows);
+            result = await batchProcessor.deactivateFlows(flowNames);
         } else {
             throw new Error(`Unsupported batch operation: ${operation}`);
         }
-        
+
         // Log batch operation
         logger.logBatchOperation(`batch_${operation}`, result.summary);
-        
+
         // Display results
         if (!options.quiet) {
             progressTracker.displaySummary();
         }
-        
+
         // Generate detailed report if requested
         if (options.report) {
             await generateDetailedReport(result, operation, options.report, logger);
         }
-        
+
         // Show individual results if verbose
         if (options.verbose) {
             console.log('\n' + chalk.bold('📋 Detailed Results:'));
@@ -179,11 +220,11 @@ async function batchCommand(operation, options, config) {
                 }
             });
         }
-        
+
         // Exit with appropriate code
         if (result.summary.failed > 0) {
             console.error(chalk.red(`\n❌ ${result.summary.failed} flows failed to ${operation}`));
-            
+
             if (options.continueOnError) {
                 console.log(chalk.yellow(`⚠️  --continue-on-error specified, exiting with success code`));
             } else {
@@ -192,7 +233,7 @@ async function batchCommand(operation, options, config) {
         } else {
             console.log(chalk.green(`\n✅ Successfully processed ${result.summary.successful} flows`));
         }
-        
+
     } catch (error) {
         logger.error(`Batch ${operation} command failed: ${error.message}`);
         console.error(chalk.red(`❌ Batch ${operation} failed: ${error.message}`));
@@ -203,51 +244,81 @@ async function batchCommand(operation, options, config) {
 async function loadFlowsFromFile(filePath) {
     try {
         const absolutePath = path.isAbsolute(filePath) ? filePath : path.resolve(filePath);
-        
+
         if (!fs.existsSync(absolutePath)) {
             throw new Error(`File not found: ${absolutePath}`);
         }
-        
+
         const content = fs.readFileSync(absolutePath, 'utf8');
         const extension = path.extname(absolutePath).toLowerCase();
-        
-        let flows = [];
-        
+
+        let flowData = [];
+
         if (extension === '.json') {
             const data = JSON.parse(content);
-            
+
             // Support various JSON formats
             if (Array.isArray(data)) {
-                flows = data;
+                flowData = data;
             } else if (data.flows && Array.isArray(data.flows)) {
-                flows = data.flows;
+                flowData = data.flows;
             } else if (data.flows && typeof data.flows === 'object') {
                 // Flatten nested flow objects
-                flows = Object.values(data.flows).flat();
+                flowData = Object.values(data.flows).flat();
             } else {
                 throw new Error('Invalid JSON format. Expected array of flow names or object with flows property');
             }
         } else if (extension === '.txt' || extension === '.csv') {
             // Plain text file with one flow per line
-            flows = content
+            flowData = content
                 .split('\n')
                 .map(line => line.trim())
                 .filter(line => line && !line.startsWith('#')); // Filter empty lines and comments
         } else {
             throw new Error(`Unsupported file format: ${extension}. Supported formats: .json, .txt, .csv`);
         }
-        
-        // Validate flow names
-        flows = flows.filter(flow => {
-            if (typeof flow !== 'string' || flow.length === 0) {
-                console.warn(chalk.yellow(`⚠️  Skipping invalid flow name: ${flow}`));
-                return false;
+
+        // Parse flow data - support both "FlowName" and "FlowName:Version" formats
+        const flows = [];
+        flowData.forEach(item => {
+            if (typeof item === 'string') {
+                if (item.length === 0) {
+                    return;
+                }
+
+                // Check if version is specified (format: FlowName:Version)
+                if (item.includes(':')) {
+                    const parts = item.split(':');
+                    const flowName = parts[0].trim();
+                    const version = parts[1].trim();
+
+                    if (flowName && version) {
+                        const versionNum = parseInt(version, 10);
+                        if (isNaN(versionNum) || versionNum < 0) {
+                            console.warn(chalk.yellow(`⚠️  Invalid version for flow '${flowName}': ${version}`));
+                            return;
+                        }
+                        flows.push({ name: flowName, version: versionNum });
+                    } else {
+                        console.warn(chalk.yellow(`⚠️  Invalid format: ${item}`));
+                    }
+                } else {
+                    // Just flow name, no version specified
+                    flows.push({ name: item, version: null });
+                }
+            } else if (typeof item === 'object' && item.name) {
+                // JSON object format: { "name": "FlowName", "version": 3 }
+                flows.push({
+                    name: item.name,
+                    version: item.version !== undefined ? parseInt(item.version, 10) : null
+                });
+            } else {
+                console.warn(chalk.yellow(`⚠️  Skipping invalid flow entry: ${JSON.stringify(item)}`));
             }
-            return true;
         });
-        
+
         return flows;
-        
+
     } catch (error) {
         throw new Error(`Failed to load flows from file ${filePath}: ${error.message}`);
     }
@@ -257,17 +328,17 @@ function getResultStatus(flowResult, operation) {
     if (!flowResult.success) {
         return chalk.red('✗ Failed');
     }
-    
+
     if (operation === 'activate') {
-        return flowResult.wasAlreadyActive ? 
-            chalk.yellow('⊝ Already Active') : 
+        return flowResult.wasAlreadyActive ?
+            chalk.yellow('⊝ Already Active') :
             chalk.green('✓ Activated');
     } else if (operation === 'deactivate') {
-        return flowResult.wasAlreadyInactive ? 
-            chalk.yellow('⊝ Already Inactive') : 
+        return flowResult.wasAlreadyInactive ?
+            chalk.yellow('⊝ Already Inactive') :
             chalk.green('✓ Deactivated');
     }
-    
+
     return chalk.green('✓ Success');
 }
 
@@ -288,13 +359,13 @@ async function generateDetailedReport(result, operation, reportPath, logger) {
                 wasAlreadyInactive: r.wasAlreadyInactive
             }))
         };
-        
+
         const reportJson = JSON.stringify(report, null, 2);
         fs.writeFileSync(reportPath, reportJson);
-        
+
         console.log(chalk.blue(`📊 Detailed report saved to: ${reportPath}`));
         logger.info(`Generated detailed report: ${reportPath}`);
-        
+
     } catch (error) {
         console.warn(chalk.yellow(`⚠️  Failed to generate report: ${error.message}`));
         logger.warn(`Failed to generate report: ${error.message}`);
