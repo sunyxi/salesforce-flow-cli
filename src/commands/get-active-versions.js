@@ -12,40 +12,74 @@ async function getActiveVersionsCommand(options, config) {
         logger.info('Starting get active versions operation');
 
         // Load flows from various sources
-        let flows = [];
+        let flowsData = [];
+        let hasTargetVersions = false;
 
         // From file
         if (options.file) {
-            flows = await loadFlowsFromFile(options.file);
-            console.log(chalk.blue(`📄 Loaded ${flows.length} flows from file: ${options.file}`));
+            flowsData = await loadFlowsFromFile(options.file);
+            console.log(chalk.blue(`📄 Loaded ${flowsData.length} flows from file: ${options.file}`));
+
+            // Check if any flows have target versions specified
+            hasTargetVersions = flowsData.some(f => f.targetVersion !== null);
+            if (hasTargetVersions) {
+                const withVersions = flowsData.filter(f => f.targetVersion !== null).length;
+                console.log(chalk.blue(`📌 ${withVersions} flows have target versions specified`));
+            }
         }
 
         // From config
         if (options.useConfig) {
             const configFlows = config.getEnvironmentFlows();
-            flows = flows.concat(configFlows);
+            const configFlowsData = configFlows.map(name => ({ name, targetVersion: null }));
+            flowsData = flowsData.concat(configFlowsData);
             console.log(chalk.blue(`⚙️  Loaded ${configFlows.length} flows from configuration`));
         }
 
         // From command line arguments
         if (options.flows && options.flows.length > 0) {
-            flows = flows.concat(options.flows);
+            const cmdFlowsData = options.flows.map(name => {
+                const parts = name.split(':');
+                if (parts.length === 2 && !isNaN(parseInt(parts[1]))) {
+                    return { name: parts[0], targetVersion: parseInt(parts[1]) };
+                }
+                return { name, targetVersion: null };
+            });
+            flowsData = flowsData.concat(cmdFlowsData);
             console.log(chalk.blue(`💻 Added ${options.flows.length} flows from command line`));
+            if (cmdFlowsData.some(f => f.targetVersion !== null)) {
+                hasTargetVersions = true;
+                const withVersions = cmdFlowsData.filter(f => f.targetVersion !== null).length;
+                console.log(chalk.blue(`📌 ${withVersions} flows from command line have target versions specified`));
+            }
         }
 
         // If no specific flows provided, get all flows
-        if (flows.length === 0 && options.all) {
+        if (flowsData.length === 0 && options.all) {
             console.log(chalk.blue('📊 Fetching all flows...'));
-        } else if (flows.length === 0) {
+        } else if (flowsData.length === 0) {
             console.error(chalk.red('❌ No flows specified. Use --file, --use-config, --all, or provide flow names'));
             process.exit(1);
         }
 
-        // Remove duplicates
-        flows = [...new Set(flows)];
+        // Remove duplicates by flow name
+        const uniqueFlowsMap = new Map();
+        flowsData.forEach(flowData => {
+            if (!uniqueFlowsMap.has(flowData.name)) {
+                uniqueFlowsMap.set(flowData.name, flowData);
+            } else {
+                // If duplicate, prefer the one with a target version specified
+                const existing = uniqueFlowsMap.get(flowData.name);
+                if (flowData.targetVersion !== null && existing.targetVersion === null) {
+                    uniqueFlowsMap.set(flowData.name, flowData);
+                }
+            }
+        });
 
-        if (flows.length > 0) {
-            console.log(chalk.blue(`📊 Total unique flows to query: ${flows.length}`));
+        flowsData = Array.from(uniqueFlowsMap.values());
+
+        if (flowsData.length > 0) {
+            console.log(chalk.blue(`📊 Total unique flows to query: ${flowsData.length}`));
         }
 
         // Initialize authentication
@@ -71,31 +105,42 @@ async function getActiveVersionsCommand(options, config) {
                     name: flowDef.DeveloperName,
                     activeVersion: activeVersion,
                     latestVersion: latestVersion,
+                    targetVersion: null,
                     isActive: activeVersion > 0,
                     hasNewerVersion: latestVersion > activeVersion,
+                    needsUpdate: false, // No target version, so no specific update needed
                     label: flowDef.MasterLabel,
                     description: flowDef.Description
                 });
             }
         } else {
             console.log(chalk.blue('🔍 Retrieving flow versions...'));
-            const result = await flowClient.getMultipleFlowStatuses(flows);
+            const flowNames = flowsData.map(f => f.name);
+            const result = await flowClient.getMultipleFlowStatuses(flowNames);
 
             if (!result.success) {
                 console.error(chalk.red(`❌ Failed to get flow statuses: ${result.message}`));
                 process.exit(1);
             }
 
-            flowStatuses = result.statuses.map(status => ({
-                name: status.name,
-                activeVersion: status.activeVersion,
-                latestVersion: status.latestVersion,
-                isActive: status.isActive,
-                hasNewerVersion: status.hasNewerVersion,
-                label: status.masterLabel,
-                description: status.description,
-                error: status.error
-            }));
+            flowStatuses = result.statuses.map(status => {
+                // Find the target version from flowsData
+                const flowData = flowsData.find(f => f.name === status.name);
+                const targetVersion = flowData ? flowData.targetVersion : null;
+
+                return {
+                    name: status.name,
+                    activeVersion: status.activeVersion,
+                    latestVersion: status.latestVersion,
+                    targetVersion: targetVersion,
+                    isActive: status.isActive,
+                    hasNewerVersion: status.hasNewerVersion,
+                    needsUpdate: targetVersion !== null && status.activeVersion !== targetVersion,
+                    label: status.masterLabel,
+                    description: status.description,
+                    error: status.error
+                };
+            });
         }
 
         // Filter by status if requested
@@ -115,7 +160,7 @@ async function getActiveVersionsCommand(options, config) {
 
         // Display results
         if (!options.quiet) {
-            displayResults(flowStatuses, options);
+            displayResults(flowStatuses, options, hasTargetVersions);
         }
 
         // Export to file if requested
@@ -127,12 +172,16 @@ async function getActiveVersionsCommand(options, config) {
         const activeCount = flowStatuses.filter(f => f.isActive).length;
         const inactiveCount = flowStatuses.filter(f => !f.isActive).length;
         const updatesCount = flowStatuses.filter(f => f.hasNewerVersion).length;
+        const needsUpdateCount = flowStatuses.filter(f => f.needsUpdate).length;
 
         console.log(chalk.blue('\n📊 Summary:'));
         console.log(`   Total flows: ${flowStatuses.length}`);
         console.log(`   Active: ${chalk.green(activeCount)}`);
         console.log(`   Inactive: ${chalk.red(inactiveCount)}`);
         console.log(`   Updates available: ${chalk.yellow(updatesCount)}`);
+        if (hasTargetVersions && needsUpdateCount > 0) {
+            console.log(`   Needs update to target version: ${chalk.yellow(needsUpdateCount)}`);
+        }
 
     } catch (error) {
         logger.error(`Get active versions command failed: ${error.message}`);
@@ -141,33 +190,66 @@ async function getActiveVersionsCommand(options, config) {
     }
 }
 
-function displayResults(flowStatuses, options) {
+function displayResults(flowStatuses, options, hasTargetVersions) {
     console.log(chalk.blue('\n📋 Flow Versions:\n'));
 
     if (options.format === 'table' || !options.format) {
         // Table format
         const maxNameLength = Math.max(...flowStatuses.map(f => f.name.length), 20);
-        const header = `${'Name'.padEnd(maxNameLength)} | Active | Latest | Status`;
+
+        let header, separator;
+        if (hasTargetVersions) {
+            header = `${'Name'.padEnd(maxNameLength)} | Active | Target | Latest | Status`;
+            separator = '-'.repeat(header.length);
+        } else {
+            header = `${'Name'.padEnd(maxNameLength)} | Active | Latest | Status`;
+            separator = '-'.repeat(header.length);
+        }
+
         console.log(chalk.bold(header));
-        console.log('-'.repeat(header.length));
+        console.log(separator);
 
         flowStatuses.forEach(flow => {
             if (flow.error) {
                 console.log(`${flow.name.padEnd(maxNameLength)} | ${chalk.red('ERROR: ' + flow.error)}`);
             } else {
                 const statusIcon = flow.isActive ? chalk.green('✓') : chalk.red('✗');
-                const updateIcon = flow.hasNewerVersion ? chalk.yellow('⚠') : ' ';
                 const activeVer = flow.activeVersion.toString().padStart(6);
                 const latestVer = flow.latestVersion.toString().padStart(6);
 
-                console.log(`${flow.name.padEnd(maxNameLength)} | ${activeVer} | ${latestVer} | ${statusIcon} ${updateIcon}`);
+                if (hasTargetVersions) {
+                    const targetVer = flow.targetVersion !== null ? flow.targetVersion.toString().padStart(6) : '    -';
+                    let updateIcon = ' ';
+
+                    if (flow.needsUpdate) {
+                        updateIcon = chalk.yellow('⚠'); // Needs update to target version
+                    } else if (flow.hasNewerVersion && flow.targetVersion === null) {
+                        updateIcon = chalk.cyan('ℹ'); // Has newer version available
+                    }
+
+                    console.log(`${flow.name.padEnd(maxNameLength)} | ${activeVer} | ${targetVer} | ${latestVer} | ${statusIcon} ${updateIcon}`);
+                } else {
+                    const updateIcon = flow.hasNewerVersion ? chalk.yellow('⚠') : ' ';
+                    console.log(`${flow.name.padEnd(maxNameLength)} | ${activeVer} | ${latestVer} | ${statusIcon} ${updateIcon}`);
+                }
             }
         });
+
+        // Legend
+        if (hasTargetVersions) {
+            console.log('\n' + chalk.dim('Legend: ✓=Active ✗=Inactive ⚠=Needs update to target ℹ=Newer version available'));
+        } else {
+            console.log('\n' + chalk.dim('Legend: ✓=Active ✗=Inactive ⚠=Update available'));
+        }
     } else if (options.format === 'simple') {
         // Simple format - just name and version
         flowStatuses.forEach(flow => {
             if (!flow.error) {
-                console.log(`${flow.name}: v${flow.activeVersion}`);
+                if (hasTargetVersions && flow.targetVersion !== null) {
+                    console.log(`${flow.name}: v${flow.activeVersion} (target: v${flow.targetVersion})`);
+                } else {
+                    console.log(`${flow.name}: v${flow.activeVersion}`);
+                }
             }
         });
     } else if (options.format === 'detailed') {
@@ -181,8 +263,16 @@ function displayResults(flowStatuses, options) {
                 console.log(`   Label: ${flow.label || 'N/A'}`);
                 console.log(`   Status: ${status}`);
                 console.log(`   Active Version: ${flow.activeVersion}`);
+                if (flow.targetVersion !== null) {
+                    console.log(`   Target Version: ${flow.targetVersion}`);
+                    if (flow.needsUpdate) {
+                        console.log(chalk.yellow(`   ⚠ Needs update from v${flow.activeVersion} to v${flow.targetVersion}!`));
+                    } else if (flow.activeVersion === flow.targetVersion) {
+                        console.log(chalk.green(`   ✓ Already at target version`));
+                    }
+                }
                 console.log(`   Latest Version: ${flow.latestVersion}`);
-                if (flow.hasNewerVersion) {
+                if (flow.hasNewerVersion && flow.targetVersion === null) {
                     console.log(chalk.yellow(`   ⚠ Update available!`));
                 }
                 if (flow.description) {
@@ -206,13 +296,27 @@ async function exportResults(flowStatuses, outputPath, format, logger) {
             };
             content = JSON.stringify(exportData, null, 2);
         } else if (format === 'csv') {
-            // CSV format
-            const headers = 'Name,Active Version,Latest Version,Is Active,Has Updates,Label,Description\n';
+            // CSV format - include target version if any flows have it
+            const hasTargetVersions = flowStatuses.some(f => f.targetVersion !== null);
+            let headers;
+            if (hasTargetVersions) {
+                headers = 'Name,Active Version,Target Version,Latest Version,Is Active,Has Updates,Needs Update,Label,Description\n';
+            } else {
+                headers = 'Name,Active Version,Latest Version,Is Active,Has Updates,Label,Description\n';
+            }
+
             const rows = flowStatuses.map(flow => {
                 const name = `"${flow.name}"`;
                 const label = `"${flow.label || ''}"`;
                 const description = `"${(flow.description || '').replace(/"/g, '""')}"`;
-                return `${name},${flow.activeVersion},${flow.latestVersion},${flow.isActive},${flow.hasNewerVersion},${label},${description}`;
+
+                if (hasTargetVersions) {
+                    const targetVer = flow.targetVersion !== null ? flow.targetVersion : '';
+                    const needsUpdate = flow.needsUpdate || false;
+                    return `${name},${flow.activeVersion},${targetVer},${flow.latestVersion},${flow.isActive},${flow.hasNewerVersion},${needsUpdate},${label},${description}`;
+                } else {
+                    return `${name},${flow.activeVersion},${flow.latestVersion},${flow.isActive},${flow.hasNewerVersion},${label},${description}`;
+                }
             }).join('\n');
             content = headers + rows;
         } else if (format === 'txt') {
@@ -221,7 +325,17 @@ async function exportResults(flowStatuses, outputPath, format, logger) {
                 if (flow.error) {
                     return `${flow.name}: ERROR - ${flow.error}`;
                 }
-                return `${flow.name}: Active v${flow.activeVersion}, Latest v${flow.latestVersion}${flow.hasNewerVersion ? ' (Update available)' : ''}`;
+                let line = `${flow.name}: Active v${flow.activeVersion}`;
+                if (flow.targetVersion !== null) {
+                    line += `, Target v${flow.targetVersion}`;
+                }
+                line += `, Latest v${flow.latestVersion}`;
+                if (flow.needsUpdate) {
+                    line += ' (Needs update to target)';
+                } else if (flow.hasNewerVersion) {
+                    line += ' (Update available)';
+                }
+                return line;
             }).join('\n');
         } else {
             throw new Error(`Unsupported export format: ${format}`);
@@ -248,25 +362,25 @@ async function loadFlowsFromFile(filePath) {
         const content = fs.readFileSync(absolutePath, 'utf8');
         const extension = path.extname(absolutePath).toLowerCase();
 
-        let flows = [];
+        let flowData = [];
 
         if (extension === '.json') {
             const data = JSON.parse(content);
 
             // Support various JSON formats
             if (Array.isArray(data)) {
-                flows = data;
+                flowData = data;
             } else if (data.flows && Array.isArray(data.flows)) {
-                flows = data.flows;
+                flowData = data.flows;
             } else if (data.flows && typeof data.flows === 'object') {
                 // Flatten nested flow objects
-                flows = Object.values(data.flows).flat();
+                flowData = Object.values(data.flows).flat();
             } else {
                 throw new Error('Invalid JSON format. Expected array of flow names or object with flows property');
             }
         } else if (extension === '.txt' || extension === '.csv') {
             // Plain text file with one flow per line
-            flows = content
+            flowData = content
                 .split('\n')
                 .map(line => line.trim())
                 .filter(line => line && !line.startsWith('#')); // Filter empty lines and comments
@@ -274,13 +388,43 @@ async function loadFlowsFromFile(filePath) {
             throw new Error(`Unsupported file format: ${extension}. Supported formats: .json, .txt, .csv`);
         }
 
-        // Validate flow names
-        flows = flows.filter(flow => {
-            if (typeof flow !== 'string' || flow.length === 0) {
-                console.warn(chalk.yellow(`⚠️  Skipping invalid flow name: ${flow}`));
-                return false;
+        // Parse flow data - support both "FlowName" and "FlowName:Version" formats
+        const flows = [];
+        flowData.forEach(item => {
+            if (typeof item === 'string') {
+                if (item.length === 0) {
+                    return;
+                }
+
+                // Check if version is specified (format: FlowName:Version)
+                if (item.includes(':')) {
+                    const parts = item.split(':');
+                    const flowName = parts[0].trim();
+                    const version = parts[1].trim();
+
+                    if (flowName && version) {
+                        const versionNum = parseInt(version, 10);
+                        if (isNaN(versionNum) || versionNum < 0) {
+                            console.warn(chalk.yellow(`⚠️  Invalid version for flow '${flowName}': ${version}`));
+                            return;
+                        }
+                        flows.push({ name: flowName, targetVersion: versionNum });
+                    } else {
+                        console.warn(chalk.yellow(`⚠️  Invalid format: ${item}`));
+                    }
+                } else {
+                    // Just flow name, no version specified
+                    flows.push({ name: item, targetVersion: null });
+                }
+            } else if (typeof item === 'object' && item.name) {
+                // JSON object format: { "name": "FlowName", "version": 3 }
+                flows.push({
+                    name: item.name,
+                    targetVersion: item.version !== undefined ? parseInt(item.version, 10) : null
+                });
+            } else {
+                console.warn(chalk.yellow(`⚠️  Skipping invalid flow entry: ${JSON.stringify(item)}`));
             }
-            return true;
         });
 
         return flows;
